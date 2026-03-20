@@ -63,7 +63,32 @@ How does Direct Logit Attribution (DLA) translate to other open-source Vision-La
 - **DLA Compatibility:** **Requires Adaptation (Generative Feature Attribution).** Because there is no token unembedding matrix ($W_U$) projecting to a discrete action probability, strict DLA cannot be applied. To achieve mechanistic interpretability on these heterogeneous streams, you must adapt the technique:
   - **SVD Projection:** Project the head activations onto the principal components (SVD) of the continuous regression metric space.
   - **Gradient × Activation:** Trace the gradient of the downstream diffusion/flow-matching loss backward into the LLM's residual stream, computing attribution scores for each head based on its localized gradient impact.
-  - **Activation Patching:** This remains universally valid. You can still ablate or swap the continuous hidden states exiting specific LLM heads before they reach the $\pi_0$ flow-matching expert to isolate causal pathways.
+  - **Activation Patching:** This remains universally valid. You can still ablate or swap the continuous hidden states exiting specific LLM heads to isolate causal pathways.
+
+### The SVD Variance Domination Problem in Continuous VLAs
+When attempting to apply DLA to continuous models (like $\pi_0$ or Octo) by projecting head activations onto the principal components (SVD) of the continuous regression metric space, a critical interpretability flaw emerges:
+
+1. **The Variance Domination Problem**: SVD extracts principal components based strictly on mathematical variance. In standard robotic trajectory datasets, macro Cartesian movements (translating the robotic arm across the X, Y, and Z axes) dictate the overwhelming majority of the physical variance in the data manifold. Conversely, the gripper state (open, closed, or slight aperture adjustments) remains static for long phases of a trajectory and changes over a very small, bounded numerical range.
+2. **The Orthogonal Erasure of Micro-Features**: When you project the downstream continuous metric space into its SVD basis vectors, the first few principal components (e.g., $PC_1$, $PC_2$, $PC_3$) will almost exclusively encode the macro arm sweeps. The micro-adjustments of the gripper aperture will be relegated to the lower-ranked, long-tail singular vectors.
+   - If you truncate your SVD projection to the top components to reduce noise (which is standard practice), you mathematically erase the gripper aperture data entirely.
+   - If you keep all components, the dot product between the attention head activations and the long-tail gripper vectors often becomes indistinguishable from baseline network noise. Because SVD is an unsupervised technique that only cares about total variance, it fundamentally cannot isolate sparse, highly localized control features.
+
+### Solutions for Fine-Grained Continuous Attribution
+If your goal is to interpret the causal pathways for highly specific, low-variance actions like gripper aperture, you must abandon unsupervised SVD and use targeted techniques:
+
+1. **Supervised Linear Probing:** Instead of relying on global variance extraction, train a simple linear probe on the residual stream of the LLM right before the continuous downstream module. Train this probe *strictly* to predict the 1D continuous scalar of the gripper aperture. The weights of this trained probe provide an exact, noise-free target vector. You can then use this vector to compute your attribution dot products, bypassing the variance problem entirely.
+2. **Dimension-Specific Gradient Attribution:** Using the Gradient $\times$ Activation technique, instead of backpropagating the total downstream loss, isolate the specific loss term corresponding strictly to the gripper aperture dimension. Backpropagating this localized scalar mathematically filters out the dominant arm movements, isolating the exact attention heads responsible for the finger micro-shifts.
+
+### Proposed Experiments for Continuous VLAs
+To validate these continuous attribution solutions, the following experiments should be run:
+
+- **Experiment 1: Linear Probe vs. SVD Correlation Mapping**
+  - Train a linear probe on the pre-action residual stream strictly for the numerical gripper aperture state.
+  - Project the residual stream heads onto both the trained probe's weight vector and the un-truncated SVD basis vectors. Compare the signal-to-noise ratio. The linear probe approach should highlight a stark, causal subset of action-driving heads, whereas SVD will return flattened noise.
+- **Experiment 2: Dimension-Isolating Gradient Tracing**
+  - Extract the loss specifically for the 1D gripper action dimension.
+  - Perform Gradient $\times$ Activation backward onto the LLM transformer layers. 
+  - Mean-ablate the top 3 highest-gradient attention heads and measure the downstream prediction collapse specifically on the gripper dimension (while rigorously verifying that Cartesian X/Y/Z predictions remain entirely unaffected).
 
 ## Files
 - `openvla_dla_full.py`: The executable pipeline.
