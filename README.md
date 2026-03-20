@@ -50,6 +50,21 @@ The distinct lack of occlusion or physical shadows permits the model to lock its
 
 **Why this is confirmatory:** Before running Mechanistic Interpretability techniques on complex, real-world robotic data (like BridgeV2) where signals are incredibly noisy, we must first prove that the mathematical technique (DLA) actually works. In noisy datasets, the visual tokens belonging to the target object may be fragmented, occluded by the robot chassis, or shaded. The core routing insight fundamentally holds—late heads still dynamically route information specifically from the required visual patches—but the attention weights may become structurally "messier", distributing across contiguous tokens or requiring multiple specialized heads working tightly in tandem. By stripping away this noise, our baseline undeniably isolates the architectural mechanics.
 
+## Applicability to Other Open-Source VLAs (e.g., $\pi_0$, Octo)
+
+How does Direct Logit Attribution (DLA) translate to other open-source Vision-Language-Action models? The defining factor is how the model processes the final action prediction layer:
+
+**1. Discrete Action VLAs (Like OpenVLA, RT-2):**
+- **Architecture:** Kinematic actions are discretized into tokens (e.g., `<action_120>`) and appended to the standard LLM vocabulary. The network produces a probability distribution over the vocabulary via a standard projection unembedding matrix ($W_U$).
+- **DLA Compatibility:** **Perfect.** Because physical actions are treated mathematically identically to text tokens, the standard LLM DLA framework ($HeadOut \cdot W_U$) works flawlessly without requiring any architectural adaptations, as demonstrated in this repository.
+
+**2. Continuous / Heterogeneous Action VLAs (Like $\pi_0$, Octo):**
+- **Architecture:** These models do not predict actions via the language model's vocabulary tokens. Instead, the LLM outputs a continuous feature state which is passed into a heterogeneous downstream module—such as a Continuous Regression Head, a Diffusion module (Octo), or an Action-Chunking Flow-Matching policy ($\pi_0$).
+- **DLA Compatibility:** **Requires Adaptation (Generative Feature Attribution).** Because there is no token unembedding matrix ($W_U$) projecting to a discrete action probability, strict DLA cannot be applied. To achieve mechanistic interpretability on these heterogeneous streams, you must adapt the technique:
+  - **SVD Projection:** Project the head activations onto the principal components (SVD) of the continuous regression metric space.
+  - **Gradient × Activation:** Trace the gradient of the downstream diffusion/flow-matching loss backward into the LLM's residual stream, computing attribution scores for each head based on its localized gradient impact.
+  - **Activation Patching:** This remains universally valid. You can still ablate or swap the continuous hidden states exiting specific LLM heads before they reach the $\pi_0$ flow-matching expert to isolate causal pathways.
+
 ## Files
 - `openvla_dla_full.py`: The executable pipeline.
 - `dla_heatmap.png`: Sparse activation matrix visualizing individual Context-Head contributions.
