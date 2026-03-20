@@ -21,46 +21,23 @@ def run_experiment():
     ).to(device)
     model.eval()
 
-    print("Generating Synthetic Vision-Action Continuous Dataset...")
-    # Load our trusted workspace dummy image
-    img_path = "workspace_dummy.jpg"
-    if not os.path.exists(img_path):
-        # Create a simple dummy image if it was lost
-        img_array = np.zeros((224, 224, 3), dtype=np.uint8)
-        img_array[100:150, 100:150, 0] = 255 # Red block
-        Image.fromarray(img_array).save(img_path)
-        
-    base_img = Image.open(img_path).convert("RGB")
+    print("Loading Beans (Proper Diverse Semantic Dataset) for Target Variance...")
+    from datasets import load_dataset
+    # Using Beans because it uses modern Parquet format instead of deprecated customized HF scripts.
+    ds = load_dataset("beans", split="train[:120]", trust_remote_code=True)
 
-    # Generate 100 pairs of (augmented_img, prompt)
-    prompts = [
-        "Open the gripper completely.",
-        "Close the gripper tightly.",
-        "Move the robotic arm forward.",
-        "Pick up the red block.",
-        "Release the object.",
-        "Shift slightly to the left.",
-        "Rotate the end effector.",
-        "Lower the arm to the table.",
-        "Grasp the object.",
-        "Let go of the block."
-    ]
-    
     samples = []
-    # Create 100 augmented variations
-    for i in range(10): # 10 prompts
-        for j in range(10): # 10 brightness adjustments
-            enhancer = ImageEnhance.Brightness(base_img)
-            # Brightness from 0.5 to 1.4
-            aug_img = enhancer.enhance(0.5 + (j * 0.1))
-            samples.append((aug_img, prompts[i]))
+    for i in range(100):
+        # We need RGB format for the processor
+        img = ds[i]['image'].convert("RGB")
+        samples.append((img, "pick up the primary object"))
 
     X_list = []
     Y_list = []
 
     print(f"Extracting residual streams & continuous actions for {len(samples)} samples...")
     for idx, (img, prompt) in enumerate(samples):
-        text_input = f"In: What action should the robot take to {prompt.lower()}\nOut:"
+        text_input = f"In: What action should the robot take to {prompt.lower()}?\nOut:"
         inputs = processor(text=text_input, images=img, return_tensors="pt").to(device, dtype=torch.float16)
 
         with torch.no_grad():
