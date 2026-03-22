@@ -136,6 +136,10 @@ To prove that the Linear Probe *can* successfully isolate fine-grained movements
 ### The Results (Massive Success)
 The experiment yielded definitively successful interpretations:
 *   **Target Variance**: The Aloha gripper exhibited genuine continuous variance ($Std = 0.353$, 77 intermediate unique values sampled).
+*   **Visual Data Sanity Check**: Below are 4 diverse frames randomly sampled from the training sequence, demonstrating the exact fine-grained continuous values (from slightly negative closed metrics to fully open ~0.77+ states) used to train the Linear Probe.
+
+![Aloha Data Samples](aloha_data_samples.png)
+
 *   **Probe R²**: The ElasticNet regularized probe achieved an **$R^2 = 0.806$**, proving the residual stream perfectly maps to the fine-grained continuous target when properly evaluated.
 *   **Extreme Sparsity**: The probe mathematically zeroed out 99.1% of the 4096 dimensions. Only **36 dimensions** were needed to predict the continuous gripper angle with $80\%$ accuracy. 
 
